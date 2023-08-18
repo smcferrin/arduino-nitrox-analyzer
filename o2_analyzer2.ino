@@ -22,17 +22,26 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <Adafruit_SSD1306.h>
-#include <Adafruit_ADS1015.h>
+#include <Adafruit_ADS1X15.h>
 #include <EEPROM.h>
 #include <RunningAverage.h>
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 64 // OLED display height, in pixels
+
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+// The pins for I2C are defined by the Wire-library. 
+// On an arduino UNO:       A4(SDA), A5(SCL)
+// On an arduino MEGA 2560: 20(SDA), 21(SCL)
+// On an arduino LEONARDO:   2(SDA),  3(SCL), ...
+#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
+#define SCREEN_ADDRESS 0x3D ///< See datasheet for Address; 0x3D for 128x64, 0x3C for 128x32
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define RA_SIZE 20
 RunningAverage RA(RA_SIZE);
 
-Adafruit_ADS1115 ads(0x48);
-
-#define OLED_RESET 4
-Adafruit_SSD1306 display(OLED_RESET);
+Adafruit_ADS1015 ads;
 
 const int buttonPin=2; // push button
 const int buzzer = 9; // buzzer
@@ -49,7 +58,7 @@ long millis_held;    // How long the button was held (milliseconds)
 long secs_held;      // How long the button was held (seconds)
 long prev_secs_held; // How long the button was held in the previous check
 byte previous = HIGH;
-unsigned long firstTime; // how long since the button was first pressed 
+unsigned long firstTime; // how long since the button was first pressed
 int active = 0;
 double result_max = 0;
 
@@ -64,23 +73,23 @@ float cal_mod (float percentage, float ppo2 = 1.4) {
 
 void beep(int x=1) { // make beep for x time
   //digitalWrite(ledPin, HIGH); // led blink disable for battery save
-  for(int i=0; i<x; i++) {    
+  for(int i=0; i<x; i++) {
       tone(buzzer, 2800, 100);
-      delay(200);    
+      delay(200);
   }
   //digitalWrite(ledPin, LOW);
   noTone(buzzer);
 }
 
-void read_sensor(int adc=0) {  
+void read_sensor(int adc=0) {
   int16_t millivolts = 0;
   millivolts = ads.readADC_Differential_0_1();
   RA.addValue(millivolts);
 }
 
-void setup(void) {  
+void setup(void) {
 
-	//Serial.begin(9600);
+	Serial.begin(9600);
 
   /* power saving stuff for battery power */
   // Disable ADC
@@ -92,23 +101,29 @@ void setup(void) {
   // DIDR0 = DIDR0 | B00111111;
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-  
+
   ads.setGain(GAIN_TWO);
   multiplier = 0.0625F;
-  ads.begin(); // ads1115 start
-  
-  pinMode(buttonPin,INPUT_PULLUP);  
-  
+
+  // ads.begin(); // ads1115 start
+
+  if (!ads.begin()) {
+    Serial.println("Failed to initialize ADS.");
+    while (1);
+  }
+
+  pinMode(buttonPin,INPUT_PULLUP);
+
   RA.clear();
   for(int cx=0; cx<= RA_SIZE; cx++) {
      read_sensor(0);
   }
-    
-  calibrationv = EEPROMReadInt(0);  
+
+  calibrationv = EEPROMReadInt(0);
   if (calibrationv < 100) {
     calibrationv = calibrate(0);
   }
-  
+
   beep(1);
 }
 
@@ -130,16 +145,16 @@ unsigned int EEPROMReadInt(int p_address)
      }
 
 int calibrate(int x) {
-  
+
   display.clearDisplay();
   display.setTextColor(WHITE);
-  display.setCursor(0,0);  
+  display.setCursor(0,0);
   display.setTextSize(2);
   display.print(F("Calibrate"));
   display.display();
-    
+
   //RA.clear();
-  double result;  
+  double result;
   for(int cx=0; cx<= RA_SIZE; cx++) {
     read_sensor(0);
   }
@@ -161,15 +176,15 @@ void analysing(int x, int cal) {
   read_sensor(0);
   currentmv = RA.getAverage();
   currentmv = abs(currentmv);
-  
+
   result = (currentmv / cal) * 20.9;
   if (result > 99.9) result = 99.9;
   mv = currentmv * multiplier;
- 
+
   display.clearDisplay();
   display.setTextColor(WHITE);
   display.setCursor(0,0);
-  
+
   if (mv < 0.02 || result <= 0) {
      display.setTextSize(2);
      display.println(F("Sensor"));
@@ -182,23 +197,23 @@ void analysing(int x, int cal) {
     if (result >= result_max) {
       result_max = result;
     }
-    
+
     display.setTextSize(1);
     display.setCursor(0,31);
-    display.setTextColor(BLACK, WHITE);    
+    display.setTextColor(BLACK, WHITE);
     display.print(F("Max "));
     display.print(result_max,1);
-    display.print(F("%   "));    
+    display.print(F("%   "));
     //display.setCursor(75,31);
-    display.print(mv,2);    
+    display.print(mv,2);
     display.print(F("mv"));
-     
+
     if (active % 4) {
       display.setCursor(115,29);
       display.setTextColor(WHITE);
       display.print(F("."));
-    }  
-    
+    }
+
     display.setTextColor(WHITE);
     display.setCursor(0,40);
     display.print(F("pO2 "));
@@ -213,12 +228,12 @@ void analysing(int x, int cal) {
     display.print(F("/"));
     display.print(cal_mod(result,max_po2),1);
     display.print(F("m "));
-    
+
     // menu
     if (secs_held < 5 && active > 16) {
       display.setTextSize(2);
       display.setCursor(0,31);
-      display.setTextColor(BLACK, WHITE);      
+      display.setTextColor(BLACK, WHITE);
       if (secs_held >= cal_holdTime && secs_held < mod_holdTime) {
         display.print(F("   CAL    "));
       }
@@ -227,8 +242,8 @@ void analysing(int x, int cal) {
       }
       if (secs_held >= max_holdtime && secs_held < 10) {
         display.print(F("   MAX    "));
-      }     
-    }  
+      }
+    }
 
   }
   display.display();
@@ -237,47 +252,47 @@ void analysing(int x, int cal) {
 void lock_screen(long pause = 5000) {
   beep(1);
   display.setTextSize(1);
-  display.setCursor(0,31);  
+  display.setCursor(0,31);
   display.setTextColor(0xFFFF, 0);
   display.print(F("                "));
   display.setTextColor(BLACK, WHITE);
   display.setCursor(0,31);
   display.print(F("======= LOCK ======="));
   display.display();
-  for (int i = 0; i < pause; ++i) {   
+  for (int i = 0; i < pause; ++i) {
     while (digitalRead(buttonPin) == HIGH) {
       }
    }
    active = 0;
 }
 
-void po2_change() {  
+void po2_change() {
   if (max_po1 == 1.3) max_po1 = 1.4;
   else if (max_po1 == 1.4) max_po1 = 1.5;
   else if (max_po1 == 1.5) max_po1 = 1.3;
-  
+
   display.clearDisplay();
   display.setTextColor(WHITE);
-  display.setCursor(0,0);  
+  display.setCursor(0,0);
   display.setTextSize(2);
   display.println(F("pO2 set"));
   display.print(max_po1);
   display.display();
-  beep(1);   
+  beep(1);
   delay(1000);
-  active = 0;  
+  active = 0;
 }
 
 void max_clear() {
   result_max = 0;
   display.clearDisplay();
   display.setTextColor(WHITE);
-  display.setCursor(0,0);  
+  display.setCursor(0,0);
   display.setTextSize(2);
   display.println(F("Max result"));
   display.print(F("cleared"));
   display.display();
-  beep(1);   
+  beep(1);
   delay(1000);
   active = 0;
 }
@@ -285,7 +300,7 @@ void max_clear() {
 void loop(void) {
 
   int current = digitalRead(buttonPin);
- 
+
   if (current == LOW && previous == HIGH && (millis() - firstTime) > 200) {
     firstTime = millis();
     active = 17;
@@ -299,7 +314,7 @@ void loop(void) {
       if (secs_held <= 0) {
         lock_screen();
       }
-      if (secs_held >= cal_holdTime && secs_held < mod_holdTime) {        
+      if (secs_held >= cal_holdTime && secs_held < mod_holdTime) {
         calibrationv = calibrate(0);
       }
       if (secs_held >= mod_holdTime && secs_held < max_holdtime) {
@@ -313,10 +328,9 @@ void loop(void) {
 
   previous = current;
   prev_secs_held = secs_held;
-  
+
   analysing(0,calibrationv);
   delay(200);
-    
+
   active++;
 }
-
