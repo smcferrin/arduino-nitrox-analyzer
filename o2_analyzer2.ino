@@ -67,11 +67,14 @@ double result_max = 0;
 */
 float max_po1 = 1.30;
 const float max_po2 = 1.60;
-float cal_mod (float percentage, float ppo2 = 1.4) {
+float cal_mod (float percentage, float ppo2 = 1.4) 
+{
   return 10 * ( (ppo2/(percentage/100)) - 1 );
 }
 
-void beep(int x=1) { // make beep for x time
+void beep(int x=1) 
+{ 
+  // make beep for x time
   //digitalWrite(ledPin, HIGH); // led blink disable for battery save
   for(int i=0; i<x; i++) {
       tone(buzzer, 2800, 100);
@@ -81,15 +84,17 @@ void beep(int x=1) { // make beep for x time
   noTone(buzzer);
 }
 
-void read_sensor(int adc=0) {
+void read_sensor(int adc=0)
+{
   int16_t millivolts = 0;
   millivolts = ads.readADC_Differential_0_1();
   RA.addValue(millivolts);
 }
 
-void setup(void) {
-
+void setup(void) 
+{
 	Serial.begin(9600);
+  Serial.println("Starting O2 Analyzer.");
 
   /* power saving stuff for battery power */
   // Disable ADC
@@ -102,10 +107,8 @@ void setup(void) {
 
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 
-  ads.setGain(GAIN_TWO);
-  multiplier = 0.0625F;
-
-  // ads.begin(); // ads1115 start
+  ads.setGain(GAIN_EIGHT); // upped the gain from two to eight
+  multiplier = .248F; // using the GAIN_EIGHT setting calculated the .248 to get the correct mV reading from the ADC for a psr-11-39-md Oxygen sensor
 
   if (!ads.begin()) {
     Serial.println("Failed to initialize ADS.");
@@ -128,29 +131,32 @@ void setup(void) {
 }
 
 void EEPROMWriteInt(int p_address, int p_value)
-     {
-     byte lowByte = ((p_value >> 0) & 0xFF);
-     byte highByte = ((p_value >> 8) & 0xFF);
+{
+  byte lowByte = ((p_value >> 0) & 0xFF);
+  byte highByte = ((p_value >> 8) & 0xFF);
 
-     EEPROM.write(p_address, lowByte);
-     EEPROM.write(p_address + 1, highByte);
-     }
+  EEPROM.write(p_address, lowByte);
+  EEPROM.write(p_address + 1, highByte);
+}
 
 unsigned int EEPROMReadInt(int p_address)
-     {
-     byte lowByte = EEPROM.read(p_address);
-     byte highByte = EEPROM.read(p_address + 1);
+{
+  byte lowByte = EEPROM.read(p_address);
+  byte highByte = EEPROM.read(p_address + 1);
 
-     return ((lowByte << 0) & 0xFF) + ((highByte << 8) & 0xFF00);
-     }
+  return ((lowByte << 0) & 0xFF) + ((highByte << 8) & 0xFF00);
+}
 
-int calibrate(int x) {
-
+int calibrate(int x) 
+{
   display.clearDisplay();
   display.setTextColor(WHITE);
   display.setCursor(0,0);
   display.setTextSize(2);
-  display.print(F("Calibrate"));
+  display.print(F("O2 Sensor"));
+  display.setCursor(0,30);
+  display.setTextSize(1);
+  display.print(F("Calibrating..."));
   display.display();
 
   //RA.clear();
@@ -168,7 +174,8 @@ int calibrate(int x) {
   return result;
 }
 
-void analysing(int x, int cal) {
+void analyzing(int x, int cal) 
+{
   double currentmv=0;
   double result;
   double mv = 0.0;
@@ -249,7 +256,8 @@ void analysing(int x, int cal) {
   display.display();
 }
 
-void lock_screen(long pause = 5000) {
+void lock_screen(long pause = 5000) 
+{
   beep(1);
   display.setTextSize(1);
   display.setCursor(0,31);
@@ -266,7 +274,8 @@ void lock_screen(long pause = 5000) {
    active = 0;
 }
 
-void po2_change() {
+void po2_change() 
+{
   if (max_po1 == 1.3) max_po1 = 1.4;
   else if (max_po1 == 1.4) max_po1 = 1.5;
   else if (max_po1 == 1.5) max_po1 = 1.3;
@@ -283,7 +292,8 @@ void po2_change() {
   active = 0;
 }
 
-void max_clear() {
+void max_clear()
+{
   result_max = 0;
   display.clearDisplay();
   display.setTextColor(WHITE);
@@ -297,8 +307,8 @@ void max_clear() {
   active = 0;
 }
 
-void loop(void) {
-
+void loop(void) 
+{
   int current = digitalRead(buttonPin);
 
   if (current == LOW && previous == HIGH && (millis() - firstTime) > 200) {
@@ -329,8 +339,8 @@ void loop(void) {
   previous = current;
   prev_secs_held = secs_held;
 
-  analysing(0,calibrationv);
-  delay(200);
+  analyzing(0,calibrationv);
+  delay(100);
 
   active++;
 }
